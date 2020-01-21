@@ -343,7 +343,7 @@ kaggle_metadata['popularity'] = pd.to_numeric(kaggle_metadata['popularity'], err
 
 # %%
 # Convert release date
-kaggle_metadata['release date'] = pd.to_datetime(kaggle_metadata['release_date'])
+kaggle_metadata['release_date'] = pd.to_datetime(kaggle_metadata['release_date'])
 
 
 # %%
@@ -366,3 +366,149 @@ ratings['rating'].describe()
 ratings['rating'].plot(kind='hist')
 
 # %%
+# Check columns for merging
+movies_df = pd.merge(wiki_movies_df, kaggle_metadata, on='imdb_id', suffixes=['_wiki','_kaggle'])
+
+# %%
+# Competing data:
+# Wiki                     Movielens                Resolution
+#--------------------------------------------------------------------------
+# title_wiki               title_kaggle             Drop Wiki
+# running_time             runtime                  Kaggle; fill zeroes with Wiki
+# budget_wiki              budget_kaggle            Kaggle; fill zeroes with Wiki
+# box_office               revenue                  Kaggle; fill zeroes with Wiki
+# release_date_wiki        release_date             Drop Wiki
+# Language                 original_language        Drop Wiki
+# Production company(s)    production_companies     Drop Wiki
+
+# %%
+# Check title
+movies_df[['title_wiki','title_kaggle']]
+
+# %%
+# Check titles where they're different
+movies_df[movies_df['title_wiki'] != movies_df['title_kaggle']][['title_wiki','title_kaggle']]
+
+# %%
+# Check missing titles in Kaggle
+movies_df[(movies_df['title_kaggle'] == '') | (movies_df['title_kaggle'].isnull())]
+
+# %%
+# Check consistency across two runtime data points, with null filled in as zeros
+movies_df.fillna(0).plot(x='running_time', y='runtime', kind='scatter')
+
+# %%
+# Check consistency across two budget data
+movies_df.fillna(0).plot(x='budget_wiki', y='budget_kaggle', kind='scatter')
+
+# %%
+# Check consistency across two box office data
+movies_df.fillna(0).plot(x='box_office', y='revenue', kind='scatter')
+
+# %%
+# Check consistency across two box office data < 1 billion
+movies_df.fillna(0)[movies_df['box_office'] < 10**9].plot(x='box_office', y='revenue', kind='scatter')
+
+# %%
+# Check consistency across two release date data.  Use line plots marker only for date data.
+movies_df[['release_date_wiki','release_date_kaggle']].plot(x='release_date_wiki', y='release_date_kaggle', style='.')
+
+# %%
+# Investigate 2006 outlier
+movies_df[(movies_df['release_date_wiki'] > '1996-01-01') & (movies_df['release_date_kaggle'] < '1965-01-01')]
+
+
+# %%
+# Find index of the problematic row - 'The Holiday' got merged with 'From Here to Eternity'
+movies_df[(movies_df['release_date_wiki'] > '1996-01-01') & (movies_df['release_date_kaggle'] < '1965-01-01')].index
+
+# %%
+# Drop identified row
+movies_df = movies_df.drop(movies_df[(movies_df['release_date_wiki'] > '1996-01-01') & (movies_df['release_date_kaggle'] < '1965-01-01')].index)
+
+
+# %%
+# Check for null release data - not plotted
+movies_df[movies_df['release_date_wiki'].isnull()]
+
+# %%
+# Check for null release data - not plotted
+movies_df[movies_df['release_date_kaggle'].isnull()]
+
+# %%
+# Check wiki language.  Some data points are list so convert to tuple before value_counts()
+movies_df['Language'].apply(lambda x: tuple(x) if type(x) == list else x).value_counts(dropna=False)
+
+
+# %%
+# Check Kaggle language
+movies_df['original_language'].value_counts(dropna=False)
+
+# %%
+# Check Production Company data
+movies_df[['Production company(s)','production_companies']]
+
+# %%
+# Drop unwanted Wiki columns
+movies_df.drop(columns=['title_wiki','release_date_wiki','Language','Production company(s)'], inplace=True)
+
+
+# %%
+# Fill missing data function
+def fill_missing_kaggle_data(df, kaggle_column, wiki_column):
+    df[kaggle_column] = df.apply(
+        lambda row: row[wiki_column] if row[kaggle_column] == 0 else row[kaggle_column]
+        , axis=1)
+    df.drop(columns=wiki_column, inplace=True)
+
+# %%
+# Fill missing values
+fill_missing_kaggle_data(movies_df, 'runtime', 'running_time')
+fill_missing_kaggle_data(movies_df, 'budget_kaggle', 'budget_wiki')
+fill_missing_kaggle_data(movies_df, 'revenue', 'box_office')
+movies_df
+
+# %%
+# Check merged columns that only has one value
+for col in movies_df.columns:
+    lists_to_tuples = lambda x: tuple(x) if type(x) == list else x
+    value_counts = movies_df[col].apply(lists_to_tuples).value_counts(dropna=False)
+    num_values = len(value_counts)
+    if num_values == 1:
+        print(col)
+
+# %%
+# check video column value
+movies_df['video'].value_counts(dropna=False)
+
+# %%
+# Skill drill using list comprehension
+[col for col in movies_df.columns if (len(movies_df[col].apply(lists_to_tuples).value_counts(dropna=False)) == 1)]
+
+# %%
+# Reorder columns
+movies_df = movies_df[['imdb_id','id','title_kaggle','original_title','tagline','belongs_to_collection','url','imdb_link',
+                       'runtime','budget_kaggle','revenue','release_date_kaggle','popularity','vote_average','vote_count',
+                       'genres','original_language','overview','spoken_languages','Country',
+                       'production_companies','production_countries','Distributor',
+                       'Producer(s)','Director','Starring','Cinematography','Editor(s)','Writer(s)','Composer(s)','Based on'
+                      ]]
+# %%
+# Rename columns
+movies_df.rename({'id':'kaggle_id',
+                  'title_kaggle':'title',
+                  'url':'wikipedia_url',
+                  'budget_kaggle':'budget',
+                  'release_date_kaggle':'release_date',
+                  'Country':'country',
+                  'Distributor':'distributor',
+                  'Producer(s)':'producers',
+                  'Director':'director',
+                  'Starring':'starring',
+                  'Cinematography':'cinematography',
+                  'Editor(s)':'editors',
+                  'Writer(s)':'writers',
+                  'Composer(s)':'composers',
+                  'Based on':'based_on'
+                 }, axis='columns', inplace=True)
+                 
