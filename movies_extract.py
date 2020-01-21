@@ -4,7 +4,9 @@ import json
 import pandas as pd 
 import numpy as np 
 import re 
-
+from sqlalchemy import create_engine
+import psycopg2
+from config import db_password
 
 # %%
 # set file directory for data import
@@ -529,3 +531,15 @@ movies_with_ratings_df = pd.merge(movies_df, rating_counts, left_on='kaggle_id',
 # %%
 # Fill in missing rating data with zeroes
 movies_with_ratings_df[rating_counts.columns] = movies_with_ratings_df[rating_counts.columns].fillna(0)
+
+# %%
+# Set up sql connection string to load
+db_string = f"postgres://postgres:{db_password}@localhost/movie_data"
+engine = create_engine(db_string)
+
+# %%
+# Load to sql table
+movies_df.to_sql(name='movies', con=engine)
+
+
+# %%
